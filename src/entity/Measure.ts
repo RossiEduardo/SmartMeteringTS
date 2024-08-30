@@ -19,4 +19,10 @@ export class Measure {
 
 	@Column()
 	uuid: string = '';
+
+	@Column()
+	measure_value: number = 0;
+
+	@Column()
+	measure_confirmed: boolean = false;
 }

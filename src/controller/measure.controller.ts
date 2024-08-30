@@ -2,13 +2,13 @@ import { Request, Response } from 'express';
 import { Measure } from '../entity/Measure';
 import AppDataSource from '../data-source';
 import { Between } from 'typeorm';
-import { extract_measure_value, validate_data } from '../utils/utils';
+import { extract_measure_value, validate_upload_data } from '../utils/utils';
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 
 export async function upload_measurement(req: Request, res: Response) {
-	let error_description: string = validate_data(req);
+	let error_description: string = validate_upload_data(req);
 	// If was found any error, return a 400 status code with the error description
 	if (error_description.length > 0) {
 		res.status(400).json({
@@ -44,31 +44,77 @@ export async function upload_measurement(req: Request, res: Response) {
         });
         return;
     }
-	// Save the new measure in the database
-	await measure_repository.save(new_measure);
-
+    
     // Convert the base64 image to a buffer
 	let img_without_metadata = new_measure.image.replace(/^data:image\/\w+;base64,/, '');
 	let img_buffer = Buffer.from(img_without_metadata, 'base64');
-
+    
     // Save the image in the system to be able to visualize it
     let file_name = `temp_image_${Date.now()}.jpg`;
     const temp_img_path = path.join('src/temp_images', file_name);
     fs.writeFileSync(temp_img_path, img_buffer);
-
+    
     // Generate a temporary link
     const expiry_time = Date.now() + 3600000; // 1 hora de validade
     const token = `${expiry_time}:${crypto.createHash('sha256').update(expiry_time + 'shopper_case').digest('hex')}`;
     
     let image_url: string = `http://localhost:3000/temp_images/${file_name}?token=${token}`;
     
-    let measure_value = extract_measure_value(temp_img_path); // Valor da medição fazer usando o gemini
+    new_measure.measure_value = await extract_measure_value(temp_img_path); // Value extracted from the image with Gemini
+    
+	// Save the new measure in the database
+	await measure_repository.save(new_measure);
 
     // Success response
     res.status(200).json({
         image_url: image_url,
-        measure_value: measure_value,
+        measure_value: new_measure.measure_value,
         measure_uuid: new_measure.uuid
     });
 	
+}
+
+export async function confirm_measurement(req: Request, res: Response) {
+    // Validate the request body, checking if uuid was string and measure_value was a number
+    if (typeof req.body.measure_uuid !== 'string' || typeof req.body.measure_value !== 'number') {
+        res.status(400).json({
+            error_code: 'INVALID_DATA',
+            error_decription: 'The fields measure_uuid and measure_value are required and must be of the correct type.'
+        });
+        return;
+    }
+
+    let measure_uuid: string = req.body.measure_uuid;
+    let measure_value: number = req.body.measure_value;
+
+    // Verify if the measure exists in the database
+    const measure_repository = AppDataSource.getRepository(Measure);
+    const existing_measure = await measure_repository.findOne({
+        where: {
+            uuid: measure_uuid
+        }
+    });
+
+    if(!existing_measure) {
+        res.status(404).json({
+            error_code: 'MEASURE_NOT_FOUND',
+            error_description: 'Leitura não encontrada.'
+        });
+        return;
+    }
+    else if (existing_measure.measure_confirmed) {
+        res.status(409).json({
+            error_code: 'ALREADY_CONFIRMED',
+            error_description: 'Leitura já confirmada.'
+        });
+        return;
+    }
+    // Update the measure value
+    existing_measure.measure_value = measure_value;
+    await measure_repository.save(existing_measure);
+
+    // Success response
+    res.status(200).json({
+        message: 'Medição confirmada com sucesso.'
+    });
 }

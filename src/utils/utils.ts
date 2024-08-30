@@ -13,8 +13,8 @@ export function is_image(image: string): boolean {
 	return base64_regex.test(image);
 }
 
-// Valid data received in the request body
-export function validate_data(req: Request): string {
+// Valid data received in the request body of the POST /upload endpoint
+export function validate_upload_data(req: Request): string {
 	let error_description: string = '';
 
 	if (typeof req.body.image !== 'string' || !is_image(req.body.image)) {
