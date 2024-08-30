@@ -8,13 +8,7 @@ import path from 'path';
 import crypto from 'crypto';
 
 export async function upload_measurement(req: Request, res: Response) {
-	let image: string;
-	let customer_code: string;
-	let measure_datetime: Date;
-	let measure_type: string;
-
 	let error_description: string = validate_data(req);
-
 	// If was found any error, return a 400 status code with the error description
 	if (error_description.length > 0) {
 		res.status(400).json({
@@ -24,21 +18,22 @@ export async function upload_measurement(req: Request, res: Response) {
 		return;
 	}
 
-	const measure_repository = AppDataSource.getRepository(Measure);
-
-	// If the data is valid, extract the values from the request body
-	image = req.body.image;
-	customer_code = req.body.customer_code;
-	measure_datetime = new Date(req.body.measure_datetime);
-	measure_type = req.body.measure_type;
-	let year: number = measure_datetime.getFullYear();
-	let month: number = measure_datetime.getMonth() + 1;
+    // If the data is valid, extract the values from the request body
+    const new_measure = new Measure();
+    new_measure.image = req.body.image;
+    new_measure.customer_code =  req.body.customer_code;
+    new_measure.measure_datetime = new Date(req.body.measure_datetime);;
+    new_measure.measure_type = req.body.measure_type;
+    new_measure.uuid = crypto.randomUUID();
+	let year: number = new_measure.measure_datetime.getFullYear();
+	let month: number = new_measure.measure_datetime.getMonth() + 1;
 
     // Verify if ther isnt a measurement in the same month and year for that type of measurement
+	const measure_repository = AppDataSource.getRepository(Measure);
 	const existing_measure = await measure_repository.findOne({
 		where: {
-			customer_code: customer_code,
-			measure_type: measure_type,
+			customer_code: new_measure.customer_code,
+			measure_type: new_measure.measure_type,
 			measure_datetime: Between(new Date(year, month - 1, 1), new Date(year, month, 1))
 		}
 	});
@@ -49,18 +44,11 @@ export async function upload_measurement(req: Request, res: Response) {
         });
         return;
     }
-
-	const new_measure = new Measure();
-    new_measure.image = image;
-	new_measure.customer_code = customer_code;
-	new_measure.measure_datetime = measure_datetime;
-	new_measure.measure_type = measure_type;
-    new_measure.uuid = crypto.randomUUID();
 	// Save the new measure in the database
 	await measure_repository.save(new_measure);
 
     // Convert the base64 image to a buffer
-	let img_without_metadata = image.replace(/^data:image\/\w+;base64,/, '');
+	let img_without_metadata = new_measure.image.replace(/^data:image\/\w+;base64,/, '');
 	let img_buffer = Buffer.from(img_without_metadata, 'base64');
 
     // Save the image in the system to be able to visualize it
