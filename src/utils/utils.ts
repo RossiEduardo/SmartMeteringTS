@@ -2,6 +2,8 @@ import { NextFunction, Request, Response } from 'express';
 import { createHash } from 'crypto';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
+import dotenv from 'dotenv';
+dotenv.config();
 
 export function is_image(image: string): boolean {
 	const base64_regex = /^data:image\/(png|jpg|jpeg|gif|bmp|webp);base64,[a-zA-Z0-9+/]+={0,2}$/;

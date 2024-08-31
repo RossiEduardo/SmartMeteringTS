@@ -4,7 +4,8 @@ import AppDataSource from './data-source';
 import 'reflect-metadata';
 import routes from './routes/routes';
 import { verify_token } from './utils/utils';
-import path from 'path';
+import path from 'path';import dotenv from 'dotenv';
+dotenv.config();
 // Create an Express application
 const app = express();
 app.use(express.json());

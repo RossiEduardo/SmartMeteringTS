@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    command: npm run dev
+    ports:
+      - "${PORT}:3000"
+    volumes:
+      - .:/usr/src/app
+      - /usr/src/app/node_modules
+    env_file:
+      - .env
+
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: ${DB_NAME}
+    ports:
+      - "3307:3306"  # Mapeia a porta 3306 do container para a porta 3307 na máquina host
+    volumes:
+      - mysql-data:/var/lib/mysql
+
+volumes:
+  mysql-data:
