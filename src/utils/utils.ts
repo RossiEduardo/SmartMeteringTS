@@ -3,13 +3,8 @@ import { createHash } from 'crypto';
 import { GoogleAIFileManager } from '@google/generative-ai/server';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-// GoogleGenerativeAI config
-const configuration = new GoogleGenerativeAI(process.env.API_KEY);
-const fileManager = new GoogleAIFileManager(process.env.API_KEY);
-const model = configuration.getGenerativeModel({ model: 'gemini-1.5-pro' });
-
 export function is_image(image: string): boolean {
-	const base64_regex = /^([0-9a-zA-Z+/]{4})*(([0-9a-zA-Z+/]{2}==)|([0-9a-zA-Z+/]{3}=))?$/;
+	const base64_regex = /^data:image\/(png|jpg|jpeg|gif|bmp|webp);base64,[a-zA-Z0-9+/]+={0,2}$/;
 	return base64_regex.test(image);
 }
 
@@ -64,34 +59,39 @@ function extract_number(texto: string): number {
 }
 
 // Extract the measure value from the image using Google LLM
-export async function extract_measure_value(image_filepath: string): Promise<number> {
-	// Upload the file using the temporary file path
-	const uploadResult = await fileManager.uploadFile(image_filepath, {
-		mimeType: 'image/jpeg',
-		displayName: 'Measure image'
+export async function extract_measure_value(image_filepath: string, mime_type: string): Promise<number> {
+	// Initialize GoogleGenerativeAI with your API_KEY.
+	const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+	const fileManager = new GoogleAIFileManager(process.env.GEMINI_API_KEY);
+
+	const model = genAI.getGenerativeModel({
+		// Choose a Gemini model.
+		model: 'gemini-1.5-flash'
 	});
-
-	// Define the prompt for the model
-	let prompt: string =
-		'You are a helpful AI bot that analyzes an image of a water or gas meter. Your task is to identify and return only the numerical reading from the meter.';
-
+	// Upload the file and specify a display name.
+	const uploadResponse = await fileManager.uploadFile(image_filepath, {
+		mimeType: 'image/jpeg',
+		displayName: 'Jetpack drawing'
+	});
+	// Generate content using text and the URI reference for the uploaded file.
 	const result = await model.generateContent([
-		prompt,
 		{
 			fileData: {
-				fileUri: uploadResult.file.uri,
-				mimeType: uploadResult.file.mimeType
+				mimeType: uploadResponse.file.mimeType,
+				fileUri: uploadResponse.file.uri
 			}
+		},
+		{
+			text: 'You are a helpful AI bot that analyzes an image of a water or gas meter. Your task is to identify and return only the numerical reading from the meter.'
 		}
 	]);
 
 	// Extract the numerical value from the response
 	let measure_value: number = extract_number(result.response.text());
-
 	return measure_value;
 }
 
-// MIddleware to verify the temporary link
+// Middleware to verify the temporary link
 export function verify_token(req: Request, res: Response, next: NextFunction): void {
 	let token: string = req.query.token as string;
 	const now = Date.now();
@@ -102,13 +102,16 @@ export function verify_token(req: Request, res: Response, next: NextFunction): v
 		// Valid if expiryTime is a valid number and creates the expected hash
 		if (expiryTime && hash) {
 			const expectedHash = createHash('sha256')
-				.update(expiryTime + 'your-secret-key')
+				.update(expiryTime + 'shopper_case')
 				.digest('hex');
 
 			// Verify if the generated hash is equal to the token hash and if the token has not expired yet
 			if (expectedHash === hash && now < parseInt(expiryTime, 10)) {
-				return next(); // Token is valid
+				return next(); // Token is valid, proceed to the next middleware or route handler
 			}
 		}
 	}
+
+	// If the token is invalid or missing, send a 403 Forbidden response
+	res.status(403).send('Invalid or expired token');
 }

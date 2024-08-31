@@ -4,12 +4,12 @@ import AppDataSource from './data-source';
 import 'reflect-metadata';
 import routes from './routes/routes';
 import { verify_token } from './utils/utils';
+import path from 'path';
 // Create an Express application
 const app = express();
 app.use(express.json());
 app.use('/', routes);
-app.use('/temp_images', verify_token, express.static('temp_images'));
-
+app.use('/temp_images', verify_token, express.static(path.join(__dirname, 'temp_images')));
 // Specify the port number for the server
 const port: number = process.env.PORT ? parseInt(process.env.PORT) : 3000;
 

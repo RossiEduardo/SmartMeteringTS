@@ -22,7 +22,6 @@ export async function upload_measurement(req: Request, res: Response) {
 
 	// If the data is valid, extract the values from the request body
 	const new_measure = new Measure();
-	new_measure.image = req.body.image;
 	new_measure.customer_code = req.body.customer_code;
 	new_measure.measure_datetime = new Date(req.body.measure_datetime);
 	new_measure.measure_type = req.body.measure_type;
@@ -47,8 +46,11 @@ export async function upload_measurement(req: Request, res: Response) {
 		return;
 	}
 
+    //Get the mime type of the image
+    let mime_type = req.body.image.split(';')[0].split(':')[1];
+
 	// Convert the base64 image to a buffer
-	let img_without_metadata = new_measure.image.replace(/^data:image\/\w+;base64,/, '');
+	let img_without_metadata = req.body.image.replace(/^data:image\/\w+;base64,/, '');
 	let img_buffer = Buffer.from(img_without_metadata, 'base64');
 
 	// Save the image in the system to be able to visualize it
@@ -64,8 +66,9 @@ export async function upload_measurement(req: Request, res: Response) {
 		.digest('hex')}`;
 
 	let image_url: string = `http://localhost:3000/temp_images/${file_name}?token=${token}`;
-
-	new_measure.measure_value = await extract_measure_value(temp_img_path); // Value extracted from the image with Gemini
+	new_measure.image = image_url;
+    
+	new_measure.measure_value = await extract_measure_value(temp_img_path, mime_type); // Value extracted from the image with Gemini
 
 	// Save the new measure in the database
 	await measure_repository.save(new_measure);
@@ -79,19 +82,19 @@ export async function upload_measurement(req: Request, res: Response) {
 }
 
 // Confirm a measurement in the system
-// Parameters: measure_uuid, measure_value
+// Parameters: measure_uuid, confirmed_value
 export async function confirm_measurement(req: Request, res: Response) {
 	// Validate the request body, checking if uuid was string and measure_value was a number
-	if (typeof req.body.measure_uuid !== 'string' || typeof req.body.measure_value !== 'number') {
+	if (typeof req.body.measure_uuid !== 'string' || isNaN(Number(req.body.confirmed_value))) {
 		res.status(400).json({
 			error_code: 'INVALID_DATA',
-			error_decription: 'The fields measure_uuid and measure_value are required and must be of the correct type.'
+			error_decription: 'The fields measure_uuid and confirmed_value are required and must be of the correct type.'
 		});
 		return;
 	}
 
 	let measure_uuid: string = req.body.measure_uuid;
-	let measure_value: number = req.body.measure_value;
+	let confirmed_value: number = req.body.confirmed_value;
 
 	// Verify if the measure exists in the database
 	const measure_repository = AppDataSource.getRepository(Measure);
@@ -115,7 +118,8 @@ export async function confirm_measurement(req: Request, res: Response) {
 		return;
 	}
 	// Update the measure value
-	existing_measure.measure_value = measure_value;
+	existing_measure.measure_value = confirmed_value;
+    existing_measure.measure_confirmed = true;
 	await measure_repository.save(existing_measure);
 
 	// Success response
